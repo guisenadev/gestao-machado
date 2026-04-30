@@ -1,9 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-// Credenciais REAIS obtidas do seu projeto
 const firebaseConfig = {
     apiKey: "AIzaSyAKttJZrl3JWweG3TIGd3I3DsezWTn1L1Y",
     authDomain: "gestaomachado.firebaseapp.com",
@@ -19,9 +18,9 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 
 let properties = [];
-let currentFilter = 'all';
 let isLoginMode = true;
 
+// Monitoramento de Login
 onAuthStateChanged(auth, (user) => {
     if (user) {
         document.getElementById('auth-screen').style.display = 'none';
@@ -35,10 +34,13 @@ onAuthStateChanged(auth, (user) => {
 });
 
 function listenToProperties(uid) {
-    const q = query(collection(db, "imoveis"), where("userId", "==", uid), orderBy("inquilino", "asc"));
+    // Simplificado para evitar erro de índice
+    const q = query(collection(db, "imoveis"), where("userId", "==", uid));
     onSnapshot(q, (snapshot) => {
         properties = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderAll();
+    }, (error) => {
+        console.error("Erro no banco:", error);
     });
 }
 
@@ -46,14 +48,10 @@ function renderAll() {
     renderStats();
     const homeList = document.getElementById('home-list');
     homeList.innerHTML = '';
-    const sorted = [...properties].sort((a, b) => {
-        const sA = getPropStatus(a);
-        const sB = getPropStatus(b);
-        if (sA === 'late' && sB !== 'late') return -1;
-        if (sA === 'near' && sB === 'in-day') return -1;
-        if (sA === 'paid' && sB !== 'paid') return 1;
-        return 0;
-    });
+    
+    // Ordenação via código para evitar erros de índice no Firebase
+    const sorted = [...properties].sort((a, b) => a.inquilino.localeCompare(b.inquilino));
+    
     sorted.forEach(p => homeList.innerHTML += createCompactCard(p));
     renderProperties();
     renderContracts();
@@ -66,25 +64,16 @@ function createCompactCard(p) {
     const valor = (p.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     
     return `
-        <div class="compact-card" style="opacity: ${isPaid ? '0.6' : '1'}" onclick="editProperty('${p.id}')">
+        <div class="compact-card" style="opacity: ${isPaid ? '0.7' : '1'}" onclick="editProperty('${p.id}')">
             <div class="card-top">
                 <span class="card-title">${p.inquilino}</span>
                 <span class="status-indicator status-${status}">${label}</span>
             </div>
             <div class="card-address">📍 ${p.endereco} • Dia ${p.vencimento}</div>
             <div style="font-size: 16px; font-weight: 800; margin-bottom: 12px; color: var(--primary);">${valor}</div>
-            
             <div class="card-actions">
-                <button class="btn-action btn-wa" onclick="sendWhatsApp(event, '${p.id}')">
-                    <span>📲</span> COBRAR
-                </button>
-                ${!isPaid ? `
-                <button class="btn-action btn-pay" onclick="event.stopPropagation(); markAsPaid('${p.id}')">
-                    <span>✅</span> BAIXA
-                </button>` : `
-                <button class="btn-action" style="background: #f0f0f0; color: #666;" onclick="event.stopPropagation(); undoPayment('${p.id}')">
-                    <span>↩️</span> DESFAZER
-                </button>`}
+                <button class="btn-action btn-wa" onclick="sendWhatsApp(event, '${p.id}')">📲 COBRAR</button>
+                ${!isPaid ? `<button class="btn-action btn-pay" onclick="event.stopPropagation(); markAsPaid('${p.id}')">✅ BAIXA</button>` : `<button class="btn-action" style="background:#f0f0f0;color:#666;" onclick="event.stopPropagation(); undoPayment('${p.id}')">↩️ DESFAZER</button>`}
             </div>
         </div>
     `;
@@ -100,16 +89,66 @@ function getPropStatus(p) {
     return 'in-day';
 }
 
+window.saveProperty = async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.innerText = "SALVANDO...";
+
+    const id = document.getElementById('prop-id').value;
+    const fileInput = document.getElementById('prop-file');
+    
+    const data = {
+        userId: auth.currentUser.uid,
+        inquilino: document.getElementById('prop-name').value,
+        telefone: document.getElementById('prop-phone').value.replace(/\D/g, ''),
+        endereco: document.getElementById('prop-address').value,
+        valor: parseFloat(document.getElementById('prop-value').value),
+        vencimento: parseInt(document.getElementById('prop-due').value),
+        updatedAt: new Date()
+    };
+
+    try {
+        let docRef;
+        if (id) {
+            docRef = doc(db, "imoveis", id);
+            await updateDoc(docRef, data);
+        } else {
+            docRef = await addDoc(collection(db, "imoveis"), data);
+        }
+
+        // Se houver arquivo, tenta subir
+        if (fileInput.files[0]) {
+            try {
+                const sRef = ref(storage, `contratos/${docRef.id || id}`);
+                await uploadBytes(sRef, fileInput.files[0]);
+                const url = await getDownloadURL(sRef);
+                await updateDoc(docRef.id ? docRef : doc(db, "imoveis", id), { contratoURL: url, hasContract: true });
+            } catch (storageErr) {
+                console.warn("Storage não habilitado ou erro no upload:", storageErr);
+                alert("Imóvel salvo, mas o contrato não pôde ser enviado (habilite o Storage no console).");
+            }
+        }
+        
+        closeModal('property-modal');
+    } catch (err) {
+        console.error("Erro ao salvar imóvel:", err);
+        alert("Erro ao salvar: " + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "SALVAR";
+    }
+};
+
 window.markAsPaid = async (id) => {
-    const d = new Date();
-    const month = (d.getMonth() + 1) + "/" + d.getFullYear();
-    if (confirm(`Confirmar que o aluguel de ${month} foi pago?`)) {
+    const month = (new Date().getMonth() + 1) + "/" + new Date().getFullYear();
+    if (confirm(`Confirmar pagamento de ${month}?`)) {
         await updateDoc(doc(db, "imoveis", id), { lastPaymentMonth: month });
     }
 };
 
 window.undoPayment = async (id) => {
-    if (confirm("Deseja cancelar a baixa deste pagamento?")) {
+    if (confirm("Desfazer baixa?")) {
         await updateDoc(doc(db, "imoveis", id), { lastPaymentMonth: "" });
     }
 };
@@ -123,10 +162,7 @@ window.handleAuth = async () => {
     try {
         if (isLoginMode) await signInWithEmailAndPassword(auth, email, pass);
         else await createUserWithEmailAndPassword(auth, email, pass);
-    } catch (e) { 
-        console.error(e);
-        alert("Erro: " + e.message); 
-    }
+    } catch (e) { alert("Erro: " + e.message); }
     btn.disabled = false;
 };
 
@@ -137,57 +173,21 @@ window.toggleAuthMode = () => {
     document.getElementById('btn-login').innerText = isLoginMode ? "ENTRAR" : "CADASTRAR";
 };
 
-window.handleLogout = () => { if(confirm("Sair do sistema?")) signOut(auth); };
-
-window.saveProperty = async (e) => {
-    e.preventDefault();
-    const id = document.getElementById('prop-id').value;
-    const fileInput = document.getElementById('prop-file');
-    const data = {
-        userId: auth.currentUser.uid,
-        inquilino: document.getElementById('prop-name').value,
-        telefone: document.getElementById('prop-phone').value.replace(/\D/g, ''),
-        endereco: document.getElementById('prop-address').value,
-        valor: parseFloat(document.getElementById('prop-value').value),
-        vencimento: parseInt(document.getElementById('prop-due').value),
-        updatedAt: new Date()
-    };
-    try {
-        let docRef;
-        if (id) {
-            docRef = doc(db, "imoveis", id);
-            await updateDoc(docRef, data);
-        } else {
-            docRef = await addDoc(collection(db, "imoveis"), data);
-        }
-        if (fileInput.files[0]) {
-            const sRef = ref(storage, `contratos/${docRef.id}`);
-            await uploadBytes(sRef, fileInput.files[0]);
-            const url = await getDownloadURL(sRef);
-            await updateDoc(docRef, { contratoURL: url, hasContract: true });
-        }
-        closeModal('property-modal');
-    } catch (e) { alert("Erro ao salvar."); }
-};
-
-window.sendWhatsApp = (e, id) => {
-    e.stopPropagation();
-    const p = properties.find(x => x.id === id);
-    const msg = `Olá *${p.inquilino}*, lembrete do aluguel (dia ${p.vencimento}). Consegue verificar?`;
-    window.open(`https://wa.me/55${p.telefone}?text=${encodeURIComponent(msg)}`, '_blank');
-};
+window.handleLogout = () => { if(confirm("Sair?")) signOut(auth); };
 
 window.switchTab = (tab, el) => {
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
     document.getElementById(`tab-${tab}`).classList.remove('hidden');
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     el.classList.add('active');
+    renderAll();
 };
 
 window.openModal = (id) => {
     document.getElementById(id).style.display = 'flex';
     document.getElementById('property-form').reset();
     document.getElementById('prop-id').value = '';
+    document.getElementById('delete-btn').classList.add('hidden');
 };
 
 window.closeModal = (id) => { document.getElementById(id).style.display = 'none'; };
@@ -195,6 +195,7 @@ window.closeModal = (id) => { document.getElementById(id).style.display = 'none'
 window.editProperty = (id) => {
     const p = properties.find(x => x.id === id);
     openModal('property-modal');
+    document.getElementById('modal-title').innerText = 'Editar Imóvel';
     document.getElementById('prop-id').value = p.id;
     document.getElementById('prop-name').value = p.inquilino;
     document.getElementById('prop-phone').value = p.telefone;
@@ -212,17 +213,30 @@ window.deleteProperty = async () => {
     }
 };
 
+window.sendWhatsApp = (e, id) => {
+    e.stopPropagation();
+    const p = properties.find(x => x.id === id);
+    const d = new Date();
+    const today = d.getDate();
+    const diff = today - p.vencimento;
+    const valor = (p.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    let msg = today > p.vencimento ? `Olá *${p.inquilino}*, notei que o aluguel de *${valor}* (vencimento dia ${p.vencimento}) está com *${diff} dias de atraso*. Poderia verificar?` : `Oi *${p.inquilino}*, lembrete do aluguel (dia ${p.vencimento}). Qualquer dúvida me avise!`;
+    window.open(`https://wa.me/55${p.telefone}?text=${encodeURIComponent(msg)}`, '_blank');
+};
+
 window.renderProperties = () => {
     const list = document.getElementById('full-list');
+    if(!list) return;
     list.innerHTML = '';
     properties.forEach(p => list.innerHTML += createCompactCard(p));
 };
 
 window.renderContracts = () => {
     const list = document.getElementById('contracts-list');
+    if(!list) return;
     list.innerHTML = '';
     properties.filter(p => p.hasContract).forEach(p => {
-        list.innerHTML += `<div class="compact-card" style="flex-direction: row; justify-content: space-between; align-items: center;"><div><b>${p.inquilino}</b></div><button class="btn-action" style="width: auto; padding: 10px 20px; background: #e8f9ed; color: var(--primary);" onclick="window.open('${p.contratoURL}', '_blank')">ABRIR</button></div>`;
+        list.innerHTML += `<div class="compact-card" style="flex-direction:row;justify-content:space-between;align-items:center;"><div><b>${p.inquilino}</b></div><button class="btn-action" style="width:auto;padding:10px 20px;background:#e8f9ed;color:var(--primary);" onclick="window.open('${p.contratoURL}', '_blank')">ABRIR</button></div>`;
     });
 };
 
@@ -235,10 +249,13 @@ function renderStats() {
         if (s === 'late') acc.late++;
         return acc;
     }, { total: 0, paid: 0, pending: 0, late: 0, rev: 0 });
-    document.getElementById('stat-revenue').innerText = stats.rev.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    document.getElementById('stat-paid').innerText = stats.paid;
-    document.getElementById('stat-pending').innerText = stats.pending;
+    const revEl = document.getElementById('stat-revenue');
+    if(revEl) revEl.innerText = stats.rev.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const paidEl = document.getElementById('stat-paid');
+    if(paidEl) paidEl.innerText = stats.paid;
+    const pendEl = document.getElementById('stat-pending');
+    if(pendEl) pendEl.innerText = stats.pending;
     const b = document.getElementById('alert-banner');
-    if (stats.late > 0) { b.style.display = 'flex'; document.getElementById('alert-text').innerText = `${stats.late} atrasados!`; }
-    else b.style.display = 'none';
+    if (b && stats.late > 0) { b.style.display = 'flex'; document.getElementById('alert-text').innerText = `${stats.late} atrasados!`; }
+    else if(b) b.style.display = 'none';
 }
