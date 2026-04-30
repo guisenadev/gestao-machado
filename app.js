@@ -3,13 +3,14 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWith
 import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
+// Credenciais REAIS obtidas do seu projeto
 const firebaseConfig = {
-    apiKey: "AIzaSyBs0vG4R9XJ...", 
+    apiKey: "AIzaSyAKttJZrl3JWweG3TIGd3I3DsezWTn1L1Y",
     authDomain: "gestaomachado.firebaseapp.com",
     projectId: "gestaomachado",
-    storageBucket: "gestaomachado.appspot.com",
+    storageBucket: "gestaomachado.firebasestorage.app",
     messagingSenderId: "673603249899",
-    appId: "1:673603249899:web:9f8e7d..."
+    appId: "1:673603249899:web:4e1dfb4bfecbdd020e00ae"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -43,11 +44,8 @@ function listenToProperties(uid) {
 
 function renderAll() {
     renderStats();
-    
-    // Lista Home (Pendentes primeiro)
     const homeList = document.getElementById('home-list');
     homeList.innerHTML = '';
-    
     const sorted = [...properties].sort((a, b) => {
         const sA = getPropStatus(a);
         const sB = getPropStatus(b);
@@ -56,7 +54,6 @@ function renderAll() {
         if (sA === 'paid' && sB !== 'paid') return 1;
         return 0;
     });
-
     sorted.forEach(p => homeList.innerHTML += createCompactCard(p));
     renderProperties();
     renderContracts();
@@ -97,7 +94,6 @@ function getPropStatus(p) {
     const d = new Date();
     const currentMonth = (d.getMonth() + 1) + "/" + d.getFullYear();
     if (p.lastPaymentMonth === currentMonth) return 'paid';
-    
     const today = d.getDate();
     if (today > p.vencimento) return 'late';
     if (p.vencimento - today <= 5) return 'near';
@@ -105,52 +101,18 @@ function getPropStatus(p) {
 }
 
 window.markAsPaid = async (id) => {
-    if (navigator.vibrate) navigator.vibrate(50);
     const d = new Date();
     const month = (d.getMonth() + 1) + "/" + d.getFullYear();
     if (confirm(`Confirmar que o aluguel de ${month} foi pago?`)) {
-        try {
-            await updateDoc(doc(db, "imoveis", id), { 
-                lastPaymentMonth: month,
-                lastPaymentDate: new Date()
-            });
-        } catch (e) { alert("Erro ao atualizar."); }
+        await updateDoc(doc(db, "imoveis", id), { lastPaymentMonth: month });
     }
 };
 
 window.undoPayment = async (id) => {
     if (confirm("Deseja cancelar a baixa deste pagamento?")) {
-        try {
-            await updateDoc(doc(db, "imoveis", id), { 
-                lastPaymentMonth: "",
-                lastPaymentDate: null
-            });
-        } catch (e) { alert("Erro ao atualizar."); }
+        await updateDoc(doc(db, "imoveis", id), { lastPaymentMonth: "" });
     }
 };
-
-// ... Funções de Login, Stats e UI (mantidas e otimizadas) ...
-
-function renderStats() {
-    const stats = properties.reduce((acc, p) => {
-        const s = getPropStatus(p);
-        acc.total++;
-        if (s === 'paid') acc.paid++; else acc.pending++;
-        if (s !== 'paid') acc.revenuePending += (p.valor || 0);
-        if (s === 'late') acc.late++;
-        return acc;
-    }, { total: 0, paid: 0, pending: 0, late: 0, revenuePending: 0 });
-
-    document.getElementById('stat-revenue').innerText = stats.revenuePending.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    document.getElementById('stat-paid').innerText = stats.paid;
-    document.getElementById('stat-pending').innerText = stats.pending;
-
-    const banner = document.getElementById('alert-banner');
-    if (stats.late > 0) {
-        banner.style.display = 'flex';
-        document.getElementById('alert-text').innerText = `${stats.late} casas com aluguel atrasado!`;
-    } else banner.style.display = 'none';
-}
 
 window.handleAuth = async () => {
     const email = document.getElementById('auth-email').value;
@@ -161,7 +123,10 @@ window.handleAuth = async () => {
     try {
         if (isLoginMode) await signInWithEmailAndPassword(auth, email, pass);
         else await createUserWithEmailAndPassword(auth, email, pass);
-    } catch (e) { alert("Acesso negado. Verifique os dados."); }
+    } catch (e) { 
+        console.error(e);
+        alert("Erro: " + e.message); 
+    }
     btn.disabled = false;
 };
 
@@ -187,7 +152,6 @@ window.saveProperty = async (e) => {
         vencimento: parseInt(document.getElementById('prop-due').value),
         updatedAt: new Date()
     };
-
     try {
         let docRef;
         if (id) {
@@ -196,7 +160,6 @@ window.saveProperty = async (e) => {
         } else {
             docRef = await addDoc(collection(db, "imoveis"), data);
         }
-
         if (fileInput.files[0]) {
             const sRef = ref(storage, `contratos/${docRef.id}`);
             await uploadBytes(sRef, fileInput.files[0]);
@@ -210,15 +173,7 @@ window.saveProperty = async (e) => {
 window.sendWhatsApp = (e, id) => {
     e.stopPropagation();
     const p = properties.find(x => x.id === id);
-    const d = new Date();
-    const today = d.getDate();
-    const diff = today - p.vencimento;
-    const valor = (p.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    
-    let msg = "";
-    if (today > p.vencimento) msg = `Olá *${p.inquilino}*, notei que o aluguel de *${valor}* (vencimento dia ${p.vencimento}) está com *${diff} dias de atraso*. Poderia verificar? Obrigado!`;
-    else msg = `Oi *${p.inquilino}*, lembrete do aluguel (dia ${p.vencimento}). Qualquer dúvida me avise!`;
-    
+    const msg = `Olá *${p.inquilino}*, lembrete do aluguel (dia ${p.vencimento}). Consegue verificar?`;
     window.open(`https://wa.me/55${p.telefone}?text=${encodeURIComponent(msg)}`, '_blank');
 };
 
@@ -233,7 +188,6 @@ window.openModal = (id) => {
     document.getElementById(id).style.display = 'flex';
     document.getElementById('property-form').reset();
     document.getElementById('prop-id').value = '';
-    document.getElementById('delete-btn').classList.add('hidden');
 };
 
 window.closeModal = (id) => { document.getElementById(id).style.display = 'none'; };
@@ -252,7 +206,7 @@ window.editProperty = (id) => {
 
 window.deleteProperty = async () => {
     const id = document.getElementById('prop-id').value;
-    if (confirm('Excluir imóvel permanentemente?')) {
+    if (confirm('Excluir imóvel?')) {
         await deleteDoc(doc(db, "imoveis", id));
         closeModal('property-modal');
     }
@@ -268,14 +222,23 @@ window.renderContracts = () => {
     const list = document.getElementById('contracts-list');
     list.innerHTML = '';
     properties.filter(p => p.hasContract).forEach(p => {
-        list.innerHTML += `
-            <div class="compact-card" style="flex-direction: row; justify-content: space-between; align-items: center;">
-                <div>
-                    <b>${p.inquilino}</b>
-                    <div style="font-size: 12px; color: #666;">Contrato</div>
-                </div>
-                <button class="btn-action" style="width: auto; padding: 10px 20px; background: #e8f9ed; color: var(--primary);" onclick="window.open('${p.contratoURL}', '_blank')">ABRIR</button>
-            </div>
-        `;
+        list.innerHTML += `<div class="compact-card" style="flex-direction: row; justify-content: space-between; align-items: center;"><div><b>${p.inquilino}</b></div><button class="btn-action" style="width: auto; padding: 10px 20px; background: #e8f9ed; color: var(--primary);" onclick="window.open('${p.contratoURL}', '_blank')">ABRIR</button></div>`;
     });
 };
+
+function renderStats() {
+    const stats = properties.reduce((acc, p) => {
+        const s = getPropStatus(p);
+        acc.total++;
+        if (s === 'paid') acc.paid++; else acc.pending++;
+        if (s !== 'paid') acc.rev += (p.valor || 0);
+        if (s === 'late') acc.late++;
+        return acc;
+    }, { total: 0, paid: 0, pending: 0, late: 0, rev: 0 });
+    document.getElementById('stat-revenue').innerText = stats.rev.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    document.getElementById('stat-paid').innerText = stats.paid;
+    document.getElementById('stat-pending').innerText = stats.pending;
+    const b = document.getElementById('alert-banner');
+    if (stats.late > 0) { b.style.display = 'flex'; document.getElementById('alert-text').innerText = `${stats.late} atrasados!`; }
+    else b.style.display = 'none';
+}
