@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
@@ -17,10 +17,15 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
+// Garante que a sessão dure para sempre (Local Persistence)
+setPersistence(auth, browserLocalPersistence);
+
 let properties = [];
 let isLoginMode = true;
 
+// Monitoramento de Login Inteligente
 onAuthStateChanged(auth, (user) => {
+    const splash = document.getElementById('loading-screen');
     if (user) {
         document.getElementById('auth-screen').style.display = 'none';
         document.getElementById('app-content').classList.remove('hidden');
@@ -30,6 +35,7 @@ onAuthStateChanged(auth, (user) => {
         document.getElementById('auth-screen').style.display = 'flex';
         document.getElementById('app-content').classList.add('hidden');
     }
+    if(splash) splash.style.display = 'none'; // Remove o carregando
 });
 
 function listenToProperties(uid) {
@@ -43,6 +49,7 @@ function listenToProperties(uid) {
 function renderAll() {
     renderStats();
     const homeList = document.getElementById('home-list');
+    if(!homeList) return;
     homeList.innerHTML = '';
     const sorted = [...properties].sort((a, b) => a.inquilino.localeCompare(b.inquilino));
     sorted.forEach(p => homeList.innerHTML += createCompactCard(p));
@@ -100,7 +107,6 @@ window.saveProperty = async (e) => {
         vencimento: parseInt(document.getElementById('prop-due').value),
         updatedAt: new Date()
     };
-
     try {
         let docRef;
         if (id) {
@@ -109,7 +115,6 @@ window.saveProperty = async (e) => {
         } else {
             docRef = await addDoc(collection(db, "imoveis"), data);
         }
-
         const file = document.getElementById('prop-file').files[0];
         if (file) {
             const sRef = ref(storage, `contratos/${docRef.id || id}`);
@@ -136,17 +141,6 @@ window.editProperty = (id) => {
     document.getElementById('delete-btn').classList.remove('hidden');
 };
 
-window.deleteProperty = async () => {
-    const id = document.getElementById('prop-id').value;
-    if (confirm('Deseja EXCLUIR permanentemente este imóvel? Esta ação não tem volta.')) {
-        try {
-            await deleteDoc(doc(db, "imoveis", id));
-            try { await deleteObject(ref(storage, `contratos/${id}`)); } catch(e) {}
-            closeModal('property-modal');
-        } catch (e) { alert("Erro ao excluir."); }
-    }
-};
-
 window.markAsPaid = async (id) => {
     const month = (new Date().getMonth() + 1) + "/" + new Date().getFullYear();
     if (confirm(`Confirmar pagamento de ${month}?`)) {
@@ -168,7 +162,7 @@ window.handleAuth = async () => {
     try {
         if (isLoginMode) await signInWithEmailAndPassword(auth, email, pass);
         else await createUserWithEmailAndPassword(auth, email, pass);
-    } catch (e) { alert("Erro: " + e.message); }
+    } catch (e) { alert("Acesso negado."); }
     btn.disabled = false;
 };
 
@@ -205,6 +199,14 @@ window.openModal = (id) => {
 
 window.closeModal = (id) => { document.getElementById(id).style.display = 'none'; };
 
+window.deleteProperty = async () => {
+    const id = document.getElementById('prop-id').value;
+    if (confirm('Excluir imóvel?')) {
+        await deleteDoc(doc(db, "imoveis", id));
+        closeModal('property-modal');
+    }
+};
+
 window.renderProperties = () => {
     const list = document.getElementById('full-list');
     if(!list) return;
@@ -229,9 +231,12 @@ function renderStats() {
         if (s === 'late') acc.late++;
         return acc;
     }, { paid: 0, pending: 0, late: 0, rev: 0 });
-    document.getElementById('stat-revenue').innerText = stats.rev.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    document.getElementById('stat-paid').innerText = stats.paid;
-    document.getElementById('stat-pending').innerText = stats.pending;
+    const revEl = document.getElementById('stat-revenue');
+    if(revEl) revEl.innerText = stats.rev.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const paidEl = document.getElementById('stat-paid');
+    if(paidEl) paidEl.innerText = stats.paid;
+    const pendEl = document.getElementById('stat-pending');
+    if(pendEl) pendEl.innerText = stats.pending;
     const b = document.getElementById('alert-banner');
     if (b && stats.late > 0) { b.style.display = 'flex'; document.getElementById('alert-text').innerText = `${stats.late} atrasados!`; }
     else if(b) b.style.display = 'none';
