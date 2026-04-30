@@ -13,20 +13,28 @@
 </head>
 <body>
 
-    <!-- Tela de Login -->
-    <div id="login-screen">
+    <!-- Tela de Autenticação -->
+    <div id="auth-screen">
         <div class="login-card">
             <div style="font-size: 50px; margin-bottom: 10px;">🏠</div>
-            <h1>GESTÃO MACHADO</h1>
+            <h1 id="auth-title">GESTÃO MACHADO</h1>
+            <p style="color: #666; margin-bottom: 20px; font-size: 14px;">Entre com sua conta para gerenciar seus aluguéis.</p>
+            
             <div class="input-group">
-                <label>Usuário</label>
-                <input type="text" id="username" placeholder="Digite seu usuário" autocapitalize="none">
+                <label>E-mail</label>
+                <input type="email" id="auth-email" placeholder="seu@email.com" autocapitalize="none">
             </div>
             <div class="input-group">
                 <label>Senha</label>
-                <input type="password" id="password" placeholder="Digite sua senha">
+                <input type="password" id="auth-password" placeholder="••••••••">
             </div>
-            <button class="btn btn-primary" onclick="handleLogin()">ENTRAR</button>
+            
+            <button class="btn btn-primary" id="btn-login" onclick="handleAuth()">ENTRAR</button>
+            
+            <div style="margin-top: 20px; font-size: 14px; color: #666;">
+                <span id="auth-switch-text">Não tem uma conta?</span>
+                <a href="#" id="auth-switch-link" onclick="toggleAuthMode()" style="color: var(--primary); font-weight: 700; text-decoration: none;">Cadastre-se</a>
+            </div>
         </div>
     </div>
 
@@ -34,7 +42,10 @@
     <div id="app-content" class="hidden">
         <header>
             <div style="font-weight: 800; color: var(--primary); letter-spacing: -1px; font-size: 20px;">GESTÃO <span style="color: #333;">MACHADO</span></div>
-            <button class="btn btn-logout" onclick="handleLogout()">Sair</button>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span id="user-display" style="font-size: 12px; color: #666; font-weight: 600;"></span>
+                <button class="btn-logout" onclick="handleLogout()">Sair</button>
+            </div>
         </header>
 
         <main class="container">
@@ -55,16 +66,16 @@
                         <h2 id="stat-revenue">R$ 0</h2>
                     </div>
                     <div class="stat-card stat-success">
-                        <span>Em dia</span>
-                        <h2 id="stat-on-time">0</h2>
+                        <span>Pagos (Mês)</span>
+                        <h2 id="stat-paid">0</h2>
                     </div>
                     <div class="stat-card stat-danger">
-                        <span>Atrasados</span>
-                        <h2 id="stat-late">0</h2>
+                        <span>Pendentes</span>
+                        <h2 id="stat-pending">0</h2>
                     </div>
                 </div>
 
-                <h3 class="section-title">Resumo Rápido</h3>
+                <h3 class="section-title">Ações Necessárias</h3>
                 <div id="recent-list">
                     <!-- Cards de imóveis aparecem aqui -->
                 </div>
@@ -80,7 +91,7 @@
                     <button class="filter-pill active" onclick="filterStatus('all', this)">Todos</button>
                     <button class="filter-pill" onclick="filterStatus('late', this)">Atrasados</button>
                     <button class="filter-pill" onclick="filterStatus('near', this)">Vencendo</button>
-                    <button class="filter-pill" onclick="filterStatus('in-day', this)">Em dia</button>
+                    <button class="filter-pill" onclick="filterStatus('paid', this)">Pagos</button>
                 </div>
 
                 <div id="full-property-list"></div>
@@ -165,6 +176,6 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>
