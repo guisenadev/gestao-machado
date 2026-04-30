@@ -22,7 +22,6 @@ setPersistence(auth, browserLocalPersistence);
 let properties = [];
 let isLoginMode = true;
 
-// Monitoramento Auth
 onAuthStateChanged(auth, (user) => {
     const splash = document.getElementById('loading-screen');
     if (user) {
@@ -90,7 +89,6 @@ function getPropStatus(p) {
     return 'in-day';
 }
 
-// Funções Globais atribuídas ao objeto window
 window.saveProperty = async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('button[type="submit"]');
@@ -143,24 +141,21 @@ window.deleteProperty = async () => {
     const id = document.getElementById('prop-id').value;
     if (!id) return;
     
-    if (confirm('Deseja realmente EXCLUIR este imóvel? Os dados serão apagados da nuvem.')) {
+    if (confirm('Deseja realmente EXCLUIR este imóvel? Os dados sumirão da nuvem.')) {
         try {
-            // 1. Apagar do Banco de Dados
+            // 1. Fecha o modal primeiro para dar feedback imediato
+            closeModal('property-modal');
+            
+            // 2. Deleta do banco
             await deleteDoc(doc(db, "imoveis", id));
             
-            // 2. Tentar apagar contrato do Storage (se existir)
-            try {
-                const sRef = ref(storage, `contratos/${id}`);
-                await deleteObject(sRef);
-            } catch (storageErr) {
-                console.log("Sem contrato para apagar ou erro no storage.");
-            }
+            // 3. Tenta deletar contrato (opcional)
+            try { await deleteObject(ref(storage, `contratos/${id}`)); } catch(e) {}
             
-            alert("Imóvel excluído com sucesso!");
-            closeModal('property-modal');
+            if (navigator.vibrate) navigator.vibrate(100);
+            console.log("Imóvel excluído:", id);
         } catch (error) {
-            console.error(error);
-            alert("Erro ao excluir do banco de dados: " + error.message);
+            alert("Erro ao excluir: " + error.message);
         }
     }
 };
@@ -186,7 +181,7 @@ window.handleAuth = async () => {
     try {
         if (isLoginMode) await signInWithEmailAndPassword(auth, email, pass);
         else await createUserWithEmailAndPassword(auth, email, pass);
-    } catch (e) { alert("Erro de acesso."); }
+    } catch (e) { alert("Acesso negado."); }
     btn.disabled = false;
 };
 
@@ -221,7 +216,9 @@ window.openModal = (id) => {
     document.getElementById('delete-btn').classList.add('hidden');
 };
 
-window.closeModal = (id) => { document.getElementById(id).style.display = 'none'; };
+window.closeModal = (id) => { 
+    document.getElementById(id).style.display = 'none'; 
+};
 
 window.renderProperties = () => {
     const list = document.getElementById('full-list');
