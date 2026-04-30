@@ -9,171 +9,132 @@
     <meta name="theme-color" content="#1D9E75">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="icon.svg">
 </head>
 <body>
 
-    <!-- Tela de Autenticação -->
+    <!-- Autenticação -->
     <div id="auth-screen">
         <div class="login-card">
-            <div style="font-size: 50px; margin-bottom: 10px;">🏠</div>
-            <h1 id="auth-title">GESTÃO MACHADO</h1>
-            <p style="color: #666; margin-bottom: 20px; font-size: 14px;">Entre com sua conta para gerenciar seus aluguéis.</p>
-            
+            <div style="font-size: 50px;">🏠</div>
+            <h1 style="color: var(--primary); margin-bottom: 25px;">GESTÃO MACHADO</h1>
             <div class="input-group">
                 <label>E-mail</label>
-                <input type="email" id="auth-email" placeholder="seu@email.com" autocapitalize="none">
+                <input type="email" id="auth-email" placeholder="seu@email.com">
             </div>
             <div class="input-group">
                 <label>Senha</label>
                 <input type="password" id="auth-password" placeholder="••••••••">
             </div>
-            
-            <button class="btn btn-primary" id="btn-login" onclick="handleAuth()">ENTRAR</button>
-            
+            <button class="btn-main" onclick="handleAuth()" id="btn-login">ENTRAR</button>
             <div style="margin-top: 20px; font-size: 14px; color: #666;">
-                <span id="auth-switch-text">Não tem uma conta?</span>
-                <a href="#" id="auth-switch-link" onclick="toggleAuthMode()" style="color: var(--primary); font-weight: 700; text-decoration: none;">Cadastre-se</a>
+                <span id="auth-switch-text">Novo por aqui?</span>
+                <a href="#" onclick="toggleAuthMode()" id="auth-switch-link" style="color: var(--primary); font-weight: 700;">Cadastre-se</a>
             </div>
         </div>
     </div>
 
-    <!-- App Principal -->
+    <!-- Conteúdo Principal -->
     <div id="app-content" class="hidden">
         <header>
-            <div style="font-weight: 800; color: var(--primary); letter-spacing: -1px; font-size: 20px;">GESTÃO <span style="color: #333;">MACHADO</span></div>
+            <div class="logo">GESTÃO <span style="color: #333;">MACHADO</span></div>
             <div style="display: flex; align-items: center; gap: 10px;">
-                <span id="user-display" style="font-size: 12px; color: #666; font-weight: 600;"></span>
-                <button class="btn-logout" onclick="handleLogout()">Sair</button>
+                <span id="user-display" class="user-tag"></span>
+                <button onclick="handleLogout()" style="background: none; border: none; font-size: 18px;">🚪</button>
             </div>
         </header>
 
-        <main class="container">
-            <!-- Aba Início (Dashboard) -->
+        <main>
+            <!-- Dashboard -->
             <section id="tab-home">
-                <div id="alert-banner" class="alert-banner">
-                    <span style="font-size: 20px;">⚠️</span>
-                    <span id="alert-text">Existem imóveis com aluguel atrasado!</span>
-                </div>
-
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <span>Total Imóveis</span>
-                        <h2 id="stat-total">0</h2>
-                    </div>
-                    <div class="stat-card">
-                        <span>Receita Mensal</span>
+                <div class="stats-scroll">
+                    <div class="stat-mini-card">
+                        <span>Receita</span>
                         <h2 id="stat-revenue">R$ 0</h2>
                     </div>
-                    <div class="stat-card stat-success">
-                        <span>Pagos (Mês)</span>
+                    <div class="stat-mini-card" style="border-bottom: 4px solid var(--success);">
+                        <span>Pagos</span>
                         <h2 id="stat-paid">0</h2>
                     </div>
-                    <div class="stat-card stat-danger">
+                    <div class="stat-mini-card" style="border-bottom: 4px solid var(--danger);">
                         <span>Pendentes</span>
                         <h2 id="stat-pending">0</h2>
                     </div>
                 </div>
 
-                <h3 class="section-title">Ações Necessárias</h3>
-                <div id="recent-list">
-                    <!-- Cards de imóveis aparecem aqui -->
+                <div style="padding: 15px; background: #fff3cd; color: #856404; margin: 0 15px 20px; border-radius: 15px; display: none; align-items: center; gap: 10px;" id="alert-banner">
+                    <span>⚠️</span> <b id="alert-text"></b>
+                </div>
+
+                <div id="home-list" class="list-container">
+                    <!-- Cards aqui -->
                 </div>
             </section>
 
-            <!-- Aba Imóveis -->
+            <!-- Imóveis -->
             <section id="tab-properties" class="hidden">
-                <div class="search-container">
-                    <input type="text" id="search-input" placeholder="Buscar inquilino ou endereço..." oninput="renderProperties()">
+                <div style="padding: 15px;">
+                    <input type="text" id="search-input" placeholder="🔍 Buscar inquilino..." oninput="renderProperties()" style="background: white;">
                 </div>
-                
-                <div class="filter-scroll">
-                    <button class="filter-pill active" onclick="filterStatus('all', this)">Todos</button>
-                    <button class="filter-pill" onclick="filterStatus('late', this)">Atrasados</button>
-                    <button class="filter-pill" onclick="filterStatus('near', this)">Vencendo</button>
-                    <button class="filter-pill" onclick="filterStatus('paid', this)">Pagos</button>
+                <div id="full-list" class="list-container">
+                    <!-- Lista completa aqui -->
                 </div>
-
-                <div id="full-property-list"></div>
             </section>
 
-            <!-- Aba Contratos -->
+            <!-- Contratos -->
             <section id="tab-contracts" class="hidden">
-                <h3 class="section-title">Arquivos de Contrato</h3>
-                <div id="contracts-list">
-                    <!-- Lista de contratos aqui -->
+                <div id="contracts-list" class="list-container" style="padding-top: 20px;">
+                    <!-- Contratos aqui -->
                 </div>
             </section>
         </main>
 
-        <!-- Barra de Navegação Inferior -->
+        <button class="fab" onclick="openModal('property-modal')">+</button>
+
         <nav class="bottom-nav">
             <button class="nav-item active" onclick="switchTab('home', this)">
-                <span class="nav-icon">🏠</span>
-                <span class="nav-label">Início</span>
+                <i>🏠</i>
+                <span>Início</span>
             </button>
             <button class="nav-item" onclick="switchTab('properties', this)">
-                <span class="nav-icon">📋</span>
-                <span class="nav-label">Imóveis</span>
+                <i>📋</i>
+                <span>Imóveis</span>
             </button>
             <button class="nav-item" onclick="switchTab('contracts', this)">
-                <span class="nav-icon">📄</span>
-                <span class="nav-label">Contratos</span>
+                <i>📄</i>
+                <span>Contratos</span>
             </button>
         </nav>
-
-        <!-- Botão Flutuante -->
-        <button class="btn-floating" onclick="openModal('property-modal')">
-            <span>+</span>
-        </button>
     </div>
 
     <!-- Modal de Cadastro -->
-    <div id="property-modal" class="modal-overlay" onclick="if(event.target == this) closeModal('property-modal')">
-        <div class="modal-content">
-            <div class="modal-drag-handle"></div>
-            <div class="modal-header">
-                <h2 id="modal-title">Novo Imóvel</h2>
-                <button class="close-modal" onclick="closeModal('property-modal')">&times;</button>
-            </div>
-            <form id="property-form" onsubmit="saveProperty(event)">
-                <input type="hidden" id="prop-id">
-                <div class="input-group">
-                    <label>Nome do Inquilino</label>
-                    <input type="text" id="prop-name" placeholder="Ex: João Silva" required>
-                </div>
-                <div class="input-group">
-                    <label>WhatsApp (com DDD)</label>
-                    <input type="tel" id="prop-phone" placeholder="Ex: 11999998888" inputmode="tel" required>
-                </div>
-                <div class="input-group">
-                    <label>Endereço</label>
-                    <input type="text" id="prop-address" placeholder="Rua, número, bairro..." required>
-                </div>
-                <div class="stats-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 0;">
-                    <div class="input-group">
-                        <label>Valor Aluguel</label>
-                        <input type="number" id="prop-value" step="0.01" placeholder="0,00" inputmode="decimal" required>
-                    </div>
-                    <div class="input-group">
-                        <label>Dia Vencimento</label>
-                        <input type="number" id="prop-due" min="1" max="31" placeholder="1 a 31" inputmode="numeric" required>
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label>Observações</label>
-                    <textarea id="prop-notes" rows="3" placeholder="Algo importante sobre este imóvel..."></textarea>
-                </div>
-                <div class="input-group">
-                    <label>Contrato (PDF ou Foto)</label>
-                    <input type="file" id="prop-file" accept="image/*,.pdf" class="file-input">
-                </div>
-                <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="submit" class="btn btn-primary" style="flex: 2;">SALVAR</button>
-                    <button type="button" id="delete-btn" class="btn btn-danger hidden" style="flex: 1;" onclick="deleteProperty()">EXCLUIR</button>
-                </div>
-            </form>
+    <div id="property-modal" class="modal" style="display: none; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 id="modal-title">Novo Imóvel</h2>
+            <button onclick="closeModal('property-modal')" style="background: #f0f0f0; border: none; padding: 10px 15px; border-radius: 50%; font-size: 20px;">&times;</button>
         </div>
+        <form onsubmit="saveProperty(event)" id="property-form">
+            <input type="hidden" id="prop-id">
+            <label>Inquilino</label>
+            <input type="text" id="prop-name" placeholder="Nome Completo" required>
+            <label>WhatsApp</label>
+            <input type="tel" id="prop-phone" placeholder="(11) 99999-9999" required>
+            <label>Endereço</label>
+            <input type="text" id="prop-address" placeholder="Rua, Número..." required>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                    <label>Valor (R$)</label>
+                    <input type="number" id="prop-value" step="0.01" placeholder="0.00" required>
+                </div>
+                <div>
+                    <label>Dia Vencimento</label>
+                    <input type="number" id="prop-due" min="1" max="31" placeholder="1-31" required>
+                </div>
+            </div>
+            <label>Contrato (Arquivo/Foto)</label>
+            <input type="file" id="prop-file" accept="image/*,.pdf">
+            <button type="submit" class="btn-main" style="margin-top: 30px;">SALVAR</button>
+            <button type="button" id="delete-btn" onclick="deleteProperty()" class="hidden" style="width: 100%; background: none; color: var(--danger); border: none; margin-top: 15px; font-weight: bold;">EXCLUIR IMÓVEL</button>
+        </form>
     </div>
 
     <script type="module" src="app.js"></script>
