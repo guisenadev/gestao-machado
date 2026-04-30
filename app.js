@@ -17,13 +17,12 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Garante que a sessão dure para sempre (Local Persistence)
 setPersistence(auth, browserLocalPersistence);
 
 let properties = [];
 let isLoginMode = true;
 
-// Monitoramento de Login Inteligente
+// Monitoramento Auth
 onAuthStateChanged(auth, (user) => {
     const splash = document.getElementById('loading-screen');
     if (user) {
@@ -35,7 +34,7 @@ onAuthStateChanged(auth, (user) => {
         document.getElementById('auth-screen').style.display = 'flex';
         document.getElementById('app-content').classList.add('hidden');
     }
-    if(splash) splash.style.display = 'none'; // Remove o carregando
+    if(splash) splash.style.display = 'none';
 });
 
 function listenToProperties(uid) {
@@ -51,7 +50,7 @@ function renderAll() {
     const homeList = document.getElementById('home-list');
     if(!homeList) return;
     homeList.innerHTML = '';
-    const sorted = [...properties].sort((a, b) => a.inquilino.localeCompare(b.inquilino));
+    const sorted = [...properties].sort((a, b) => (a.inquilino || "").localeCompare(b.inquilino || ""));
     sorted.forEach(p => homeList.innerHTML += createCompactCard(p));
     renderProperties();
     renderContracts();
@@ -76,9 +75,7 @@ function createCompactCard(p) {
             </div>
             <div class="card-actions">
                 <button class="btn-action btn-wa" onclick="sendWhatsApp(event, '${p.id}')">📲 COBRAR</button>
-                ${!isPaid ? `
-                <button class="btn-action btn-pay" onclick="markAsPaid('${p.id}')">✅ BAIXA</button>` : `
-                <button class="btn-action" style="background:#f0f0f0;color:#666;" onclick="undoPayment('${p.id}')">↩️ DESFAZER</button>`}
+                ${!isPaid ? `<button class="btn-action btn-pay" onclick="event.stopPropagation(); markAsPaid('${p.id}')">✅ BAIXA</button>` : `<button class="btn-action" style="background:#f0f0f0;color:#666;" onclick="event.stopPropagation(); undoPayment('${p.id}')">↩️ DESFAZER</button>`}
             </div>
         </div>
     `;
@@ -93,6 +90,7 @@ function getPropStatus(p) {
     return 'in-day';
 }
 
+// Funções Globais atribuídas ao objeto window
 window.saveProperty = async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('button[type="submit"]');
@@ -141,6 +139,32 @@ window.editProperty = (id) => {
     document.getElementById('delete-btn').classList.remove('hidden');
 };
 
+window.deleteProperty = async () => {
+    const id = document.getElementById('prop-id').value;
+    if (!id) return;
+    
+    if (confirm('Deseja realmente EXCLUIR este imóvel? Os dados serão apagados da nuvem.')) {
+        try {
+            // 1. Apagar do Banco de Dados
+            await deleteDoc(doc(db, "imoveis", id));
+            
+            // 2. Tentar apagar contrato do Storage (se existir)
+            try {
+                const sRef = ref(storage, `contratos/${id}`);
+                await deleteObject(sRef);
+            } catch (storageErr) {
+                console.log("Sem contrato para apagar ou erro no storage.");
+            }
+            
+            alert("Imóvel excluído com sucesso!");
+            closeModal('property-modal');
+        } catch (error) {
+            console.error(error);
+            alert("Erro ao excluir do banco de dados: " + error.message);
+        }
+    }
+};
+
 window.markAsPaid = async (id) => {
     const month = (new Date().getMonth() + 1) + "/" + new Date().getFullYear();
     if (confirm(`Confirmar pagamento de ${month}?`)) {
@@ -162,7 +186,7 @@ window.handleAuth = async () => {
     try {
         if (isLoginMode) await signInWithEmailAndPassword(auth, email, pass);
         else await createUserWithEmailAndPassword(auth, email, pass);
-    } catch (e) { alert("Acesso negado."); }
+    } catch (e) { alert("Erro de acesso."); }
     btn.disabled = false;
 };
 
@@ -199,14 +223,6 @@ window.openModal = (id) => {
 
 window.closeModal = (id) => { document.getElementById(id).style.display = 'none'; };
 
-window.deleteProperty = async () => {
-    const id = document.getElementById('prop-id').value;
-    if (confirm('Excluir imóvel?')) {
-        await deleteDoc(doc(db, "imoveis", id));
-        closeModal('property-modal');
-    }
-};
-
 window.renderProperties = () => {
     const list = document.getElementById('full-list');
     if(!list) return;
@@ -231,12 +247,12 @@ function renderStats() {
         if (s === 'late') acc.late++;
         return acc;
     }, { paid: 0, pending: 0, late: 0, rev: 0 });
-    const revEl = document.getElementById('stat-revenue');
-    if(revEl) revEl.innerText = stats.rev.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    const paidEl = document.getElementById('stat-paid');
-    if(paidEl) paidEl.innerText = stats.paid;
-    const pendEl = document.getElementById('stat-pending');
-    if(pendEl) pendEl.innerText = stats.pending;
+    const elRev = document.getElementById('stat-revenue');
+    if(elRev) elRev.innerText = stats.rev.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const elPaid = document.getElementById('stat-paid');
+    if(elPaid) elPaid.innerText = stats.paid;
+    const elPend = document.getElementById('stat-pending');
+    if(elPend) elPend.innerText = stats.pending;
     const b = document.getElementById('alert-banner');
     if (b && stats.late > 0) { b.style.display = 'flex'; document.getElementById('alert-text').innerText = `${stats.late} atrasados!`; }
     else if(b) b.style.display = 'none';
