@@ -1,208 +1,141 @@
-// Configurações Iniciais e Banco de Dados (IndexedDB)
-let db;
-const DB_NAME = "MachadoDB";
-const STORE_NAME = "contracts";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const initDB = () => {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 1);
-        request.onupgradeneeded = (e) => {
-            if (!e.target.result.objectStoreNames.contains(STORE_NAME)) {
-                e.target.result.createObjectStore(STORE_NAME);
-            }
-        };
-        request.onsuccess = (e) => {
-            db = e.target.result;
-            resolve();
-        };
-        request.onerror = (e) => reject(e);
-    });
+// Configuração do Firebase
+const firebaseConfig = {
+    apiKey: "AIzaSyBs0vG4R9XJ...", 
+    authDomain: "gestaomachado.firebaseapp.com",
+    projectId: "gestaomachado",
+    storageBucket: "gestaomachado.appspot.com",
+    messagingSenderId: "673603249899",
+    appId: "1:673603249899:web:9f8e7d..."
 };
-
-const saveFileToDB = (id, file) => {
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORE_NAME], "readwrite");
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.put(file, id);
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject();
-    });
-};
-
-const getFileFromDB = (id) => {
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORE_NAME], "readonly");
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.get(id);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject();
-    });
-};
-
-const deleteFileFromDB = (id) => {
-    const transaction = db.transaction([STORE_NAME], "readwrite");
-    transaction.objectStore(STORE_NAME).delete(id);
-};
-
-// Estado Global
-let properties = JSON.parse(localStorage.getItem('properties')) || [];
-let currentFilter = 'all';
 
 // Inicialização
-document.addEventListener('DOMContentLoaded', async () => {
-    await initDB();
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const storage = getStorage(app);
+
+// Estado Global
+let properties = [];
+let currentFilter = 'all';
+
+// Inicialização ao carregar a página
+document.addEventListener('DOMContentLoaded', () => {
     checkLogin();
-    if (properties.length === 0) loadDemoData();
     setupMasks();
-    renderAll();
     
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js');
+    if (localStorage.getItem('isLoggedIn') === 'true') {
+        listenToProperties();
     }
 });
 
-// Máscaras de Input (Facilita para idosos)
+// Listener em Tempo Real (O coração do app profissional)
+function listenToProperties() {
+    const q = query(collection(db, "imoveis"), orderBy("inquilino", "asc"));
+    onSnapshot(q, (snapshot) => {
+        properties = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderAll();
+    });
+}
+
+// Máscaras de Input
 function setupMasks() {
     const phoneInput = document.getElementById('prop-phone');
-    phoneInput.addEventListener('input', (e) => {
-        let x = e.target.value.replace(/\D/g, '').match(/(\d{0,2})(\d{0,5})(\d{0,4})/);
-        e.target.value = !x[2] ? x[1] : '(' + x[1] + ') ' + x[2] + (x[3] ? '-' + x[3] : '');
-    });
-
-    const valueInput = document.getElementById('prop-value');
-    valueInput.addEventListener('blur', (e) => {
-        if (e.target.value) {
-            let val = parseFloat(e.target.value);
-            e.target.setAttribute('data-val', val);
-        }
-    });
-}
-
-// Autenticação
-function handleLogin() {
-    const user = document.getElementById('username').value.trim().toLowerCase();
-    const pass = document.getElementById('password').value;
-
-    if (user === 'admin' && pass === 'admin') {
-        localStorage.setItem('isLoggedIn', 'true');
-        vibrate(50);
-        checkLogin();
-    } else {
-        alert('Usuário ou senha incorretos!');
+    if(phoneInput) {
+        phoneInput.addEventListener('input', (e) => {
+            let x = e.target.value.replace(/\D/g, '').match(/(\d{0,2})(\d{0,5})(\d{0,4})/);
+            e.target.value = !x[2] ? x[1] : '(' + x[1] + ') ' + x[2] + (x[3] ? '-' + x[3] : '');
+        });
     }
 }
 
-function handleLogout() {
-    if (confirm('Deseja realmente sair?')) {
-        localStorage.removeItem('isLoggedIn');
-        checkLogin();
-    }
-}
-
-function checkLogin() {
-    const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
-    const loginScreen = document.getElementById('login-screen');
-    const appContent = document.getElementById('app-content');
-
-    if (isLoggedIn) {
-        loginScreen.style.display = 'none';
-        appContent.classList.remove('hidden');
-    } else {
-        loginScreen.style.display = 'flex';
-        appContent.classList.add('hidden');
-    }
-}
-
-// Navegação
-function switchTab(tab, el) {
-    vibrate(10);
-    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-    document.getElementById(`tab-${tab}`).classList.remove('hidden');
-    
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    el.classList.add('active');
-    
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    if (tab === 'properties') renderProperties();
-    if (tab === 'contracts') renderContracts();
-}
-
-// Lógica de Imóveis
-function getStatus(day) {
-    const today = new Date();
-    const currentDay = today.getDate();
-    const dueDate = parseInt(day);
-
-    if (currentDay > dueDate) return 'late';
-    if (dueDate - currentDay <= 5 && dueDate - currentDay >= 0) return 'near';
-    return 'in-day';
-}
-
-function getStatusLabel(status, day) {
-    const today = new Date();
-    const currentDay = today.getDate();
-    const diff = currentDay - parseInt(day);
-
-    if (status === 'late') return `Atrasado ${diff} ${diff === 1 ? 'dia' : 'dias'}`;
-    if (status === 'near') return (parseInt(day) - currentDay === 0) ? 'Vence Hoje' : 'Vence em breve';
-    return 'Em dia';
-}
-
-function saveProperty(e) {
+// Salvar Imóvel (Nuvem + Arquivo)
+window.saveProperty = async function(e) {
     e.preventDefault();
-    const id = document.getElementById('prop-id').value || Date.now().toString();
+    const btn = e.target.querySelector('button[type="submit"]');
+    const originalText = btn.innerText;
+    btn.innerText = "SALVANDO...";
+    btn.disabled = true;
+
+    const id = document.getElementById('prop-id').value;
     const fileInput = document.getElementById('prop-file');
-    
     const rawPhone = document.getElementById('prop-phone').value.replace(/\D/g, '');
     
-    const newProp = {
-        id,
+    const propData = {
         inquilino: document.getElementById('prop-name').value,
         telefone: rawPhone,
         endereco: document.getElementById('prop-address').value,
         valor: parseFloat(document.getElementById('prop-value').value),
         vencimento: parseInt(document.getElementById('prop-due').value),
         observacoes: document.getElementById('prop-notes').value,
-        hasContract: !!(fileInput.files[0]) || (properties.find(p => p.id === id)?.hasContract || false)
+        updatedAt: new Date()
     };
 
-    if (fileInput.files[0]) {
-        saveFileToDB(id, fileInput.files[0]);
-    }
+    try {
+        let docRef;
+        if (id) {
+            docRef = doc(db, "imoveis", id);
+            await updateDoc(docRef, propData);
+        } else {
+            propData.createdAt = new Date();
+            docRef = await addDoc(collection(db, "imoveis"), propData);
+        }
 
-    const index = properties.findIndex(p => p.id === id);
-    if (index > -1) properties[index] = newProp;
-    else properties.push(newProp);
+        // Upload de Contrato (Firebase Storage)
+        if (fileInput.files[0]) {
+            const file = fileInput.files[0];
+            const storageRef = ref(storage, `contratos/${docRef.id}`);
+            await uploadBytes(storageRef, file);
+            const downloadURL = await getDownloadURL(storageRef);
+            await updateDoc(docRef, { contratoURL: downloadURL, hasContract: true });
+        }
 
-    localStorage.setItem('properties', JSON.stringify(properties));
-    vibrate(30);
-    closeModal('property-modal');
-    renderAll();
-}
-
-function deleteProperty() {
-    const id = document.getElementById('prop-id').value;
-    if (confirm('Tem certeza que deseja excluir este imóvel? Todos os dados e o contrato serão apagados permanentemente.')) {
-        properties = properties.filter(p => p.id !== id);
-        deleteFileFromDB(id);
-        localStorage.setItem('properties', JSON.stringify(properties));
+        vibrate(30);
         closeModal('property-modal');
-        renderAll();
+    } catch (error) {
+        console.error("Erro:", error);
+        alert("Erro ao salvar na nuvem. Verifique sua conexão.");
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
     }
-}
+};
 
-// Renderização
+// Excluir Imóvel
+window.deleteProperty = async function() {
+    const id = document.getElementById('prop-id').value;
+    if (confirm('Excluir este imóvel e todos os seus dados da nuvem?')) {
+        try {
+            await deleteDoc(doc(db, "imoveis", id));
+            // Tenta deletar o contrato do Storage também
+            try { await deleteObject(ref(storage, `contratos/${id}`)); } catch(e) {}
+            vibrate(50);
+            closeModal('property-modal');
+        } catch (error) {
+            alert("Erro ao excluir.");
+        }
+    }
+};
+
+// Renderização e UI
 function renderAll() {
     renderStats();
     renderRecent();
+    if (!document.getElementById('tab-properties').classList.contains('hidden')) {
+        renderProperties();
+    }
+    if (!document.getElementById('tab-contracts').classList.contains('hidden')) {
+        renderContracts();
+    }
 }
 
 function renderStats() {
     const stats = properties.reduce((acc, p) => {
         const status = getStatus(p.vencimento);
         acc.total++;
-        acc.revenue += p.valor;
+        acc.revenue += (p.valor || 0);
         if (status === 'late') acc.late++;
         if (status === 'in-day' || status === 'near') acc.onTime++;
         return acc;
@@ -226,19 +159,17 @@ function renderRecent() {
     const list = document.getElementById('recent-list');
     list.innerHTML = '';
     
-    // Ordena por status (atrasados primeiro)
     const sorted = [...properties].sort((a, b) => {
         const statusA = getStatus(a.vencimento);
         const statusB = getStatus(b.vencimento);
         if (statusA === 'late' && statusB !== 'late') return -1;
-        if (statusA !== 'late' && statusB === 'late') return 1;
-        return 0;
+        return 1;
     });
 
     if (sorted.length === 0) {
         list.innerHTML = `<div style="text-align: center; padding: 40px; color: #999;">
             <div style="font-size: 50px; margin-bottom: 10px;">🏘️</div>
-            <p>Nenhum imóvel cadastrado.<br>Toque no + para começar.</p>
+            <p>Nenhum imóvel cadastrado.</p>
         </div>`;
         return;
     }
@@ -248,7 +179,7 @@ function renderRecent() {
     });
 }
 
-function renderProperties() {
+window.renderProperties = function() {
     const list = document.getElementById('full-property-list');
     const search = document.getElementById('search-input').value.toLowerCase();
     list.innerHTML = '';
@@ -260,20 +191,15 @@ function renderProperties() {
         return matchesSearch && matchesFilter;
     });
 
-    if (filtered.length === 0) {
-        list.innerHTML = `<p style="text-align: center; padding: 40px; color: #999;">Nenhum imóvel encontrado.</p>`;
-        return;
-    }
-
     filtered.forEach(p => {
         list.innerHTML += createPropertyCard(p);
     });
-}
+};
 
 function createPropertyCard(p) {
     const status = getStatus(p.vencimento);
     const label = getStatusLabel(status, p.vencimento);
-    const valorFormato = p.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const valorFormato = (p.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     
     return `
         <div class="property-card" onclick="editProperty('${p.id}')">
@@ -286,12 +212,12 @@ function createPropertyCard(p) {
             </div>
             <div style="background: #f8f9fa; padding: 12px; border-radius: 12px; margin-bottom: 15px;">
                 <div style="display: flex; justify-content: space-between; font-size: 14px;">
-                    <span style="color: #666;">Valor Mensal</span>
+                    <span style="color: #666;">Valor</span>
                     <span style="font-weight: 700; color: #1a1a1a;">${valorFormato}</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; font-size: 14px; margin-top: 5px;">
                     <span style="color: #666;">Vencimento</span>
-                    <span style="font-weight: 700; color: #1a1a1a;">Todo dia ${p.vencimento}</span>
+                    <span style="font-weight: 700; color: #1a1a1a;">Dia ${p.vencimento}</span>
                 </div>
             </div>
             <button class="btn btn-whatsapp" onclick="sendWhatsApp(event, '${p.id}')">
@@ -301,17 +227,13 @@ function createPropertyCard(p) {
     `;
 }
 
-function renderContracts() {
+window.renderContracts = function() {
     const list = document.getElementById('contracts-list');
     list.innerHTML = '';
-    
     const withContracts = properties.filter(p => p.hasContract);
     
     if (withContracts.length === 0) {
-        list.innerHTML = `<div style="text-align: center; padding: 40px; color: #999;">
-            <div style="font-size: 50px; margin-bottom: 10px;">📄</div>
-            <p>Nenhum contrato anexado.</p>
-        </div>`;
+        list.innerHTML = `<p style="text-align: center; padding: 40px; color: #999;">Nenhum contrato na nuvem.</p>`;
         return;
     }
 
@@ -319,17 +241,36 @@ function renderContracts() {
         list.innerHTML += `
             <div class="contract-item" style="background: white; padding: 18px; border-radius: 20px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
                 <div>
-                    <div style="font-weight: 700; color: #1a1a1a;">${p.inquilino}</div>
-                    <div style="font-size: 12px; color: #666;">Contrato de Aluguel</div>
+                    <div style="font-weight: 700;">${p.inquilino}</div>
+                    <div style="font-size: 12px; color: #666;">${p.endereco}</div>
                 </div>
-                <button class="btn" style="background: #e8f9ed; color: var(--primary); padding: 8px 20px; border-radius: 12px; font-size: 14px; font-weight: 700;" onclick="viewContract('${p.id}')">ABRIR</button>
+                <button class="btn" style="background: #e8f9ed; color: var(--primary); padding: 8px 15px; border-radius: 12px; font-size: 14px; font-weight: 700;" onclick="window.open('${p.contratoURL}', '_blank')">VER</button>
             </div>
         `;
     });
+};
+
+// Logica de Status (Baseada no dia atual)
+function getStatus(day) {
+    const today = new Date();
+    const currentDay = today.getDate();
+    const dueDate = parseInt(day);
+    if (currentDay > dueDate) return 'late';
+    if (dueDate - currentDay <= 5 && dueDate - currentDay >= 0) return 'near';
+    return 'in-day';
 }
 
-// WhatsApp Logic
-function sendWhatsApp(e, id) {
+function getStatusLabel(status, day) {
+    const today = new Date();
+    const currentDay = today.getDate();
+    const diff = currentDay - parseInt(day);
+    if (status === 'late') return `Atrasado ${diff} ${diff === 1 ? 'dia' : 'dias'}`;
+    if (status === 'near') return (parseInt(day) - currentDay === 0) ? 'Vence Hoje' : 'Vence em breve';
+    return 'Em dia';
+}
+
+// WhatsApp
+window.sendWhatsApp = function(e, id) {
     e.stopPropagation();
     vibrate(20);
     const p = properties.find(prop => prop.id === id);
@@ -337,98 +278,87 @@ function sendWhatsApp(e, id) {
     const today = new Date();
     const currentDay = today.getDate();
     const diff = currentDay - p.vencimento;
-    const valorFormato = p.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const valorFormato = (p.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
     let message = "";
-    
     if (status === 'near') {
         if (diff === 0) message = `Olá *${p.inquilino}*! Passando para lembrar que seu aluguel de *${valorFormato}* vence hoje. Qualquer dúvida estou à disposição! 😊`;
-        else if (p.vencimento - currentDay === 1) message = `Oi *${p.inquilino}*, tudo bem? Lembrete amigável: seu aluguel vence amanhã, dia *${p.vencimento}*. 🏠`;
-        else message = `Olá *${p.inquilino}*! Tudo bem? Passando para lembrar que o aluguel de *${valorFormato}* vence em alguns dias (dia *${p.vencimento}*).`;
+        else message = `Oi *${p.inquilino}*, lembrete amigável: seu aluguel de *${valorFormato}* vence dia *${p.vencimento}*. 🏠`;
     } else if (status === 'late') {
-        if (diff <= 7) message = `Olá *${p.inquilino}*, tudo bem? Notei que o aluguel de *${valorFormato}* (vencimento dia ${p.vencimento}) ainda não consta como pago. Ele está com *${diff} dias de atraso*. Consegue verificar para mim? Obrigado!`;
-        else message = `Olá *${p.inquilino}*, precisamos conversar sobre o aluguel que venceu no dia ${p.vencimento}. Já temos *${diff} dias de atraso*. Por favor, me dê um retorno o quanto antes.`;
+        message = `Olá *${p.inquilino}*, o aluguel de *${valorFormato}* (dia ${p.vencimento}) está com *${diff} dias de atraso*. Consegue verificar para mim? Obrigado!`;
     } else {
-        message = `Olá *${p.inquilino}*, tudo bem? Passando para desejar um ótimo mês e confirmar o recebimento do aluguel. Obrigado! 👍`;
+        message = `Olá *${p.inquilino}*, tudo bem? Passando para confirmar o recebimento do aluguel. Obrigado! 👍`;
     }
 
-    const url = `https://wa.me/55${p.telefone}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
+    window.open(`https://wa.me/55${p.telefone}?text=${encodeURIComponent(message)}`, '_blank');
+};
+
+// Auth
+window.handleLogin = function() {
+    const user = document.getElementById('username').value.trim().toLowerCase();
+    const pass = document.getElementById('password').value;
+    if (user === 'admin' && pass === 'admin') {
+        localStorage.setItem('isLoggedIn', 'true');
+        vibrate(50);
+        checkLogin();
+        listenToProperties();
+    } else {
+        alert('Usuário ou senha incorretos!');
+    }
+};
+
+window.handleLogout = function() {
+    if (confirm('Sair do sistema?')) {
+        localStorage.removeItem('isLoggedIn');
+        location.reload();
+    }
+};
+
+function checkLogin() {
+    const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    document.getElementById('login-screen').style.display = isLoggedIn ? 'none' : 'flex';
+    document.getElementById('app-content').classList.toggle('hidden', !isLoggedIn);
 }
 
-// Utilitários
-function vibrate(ms) {
-    if (navigator.vibrate) navigator.vibrate(ms);
-}
+// Navegação e Modais
+window.switchTab = function(tab, el) {
+    vibrate(10);
+    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+    document.getElementById(`tab-${tab}`).classList.remove('hidden');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+    renderAll();
+};
 
-function openModal(id) {
+window.openModal = function(id) {
     document.getElementById(id).style.display = 'flex';
     document.getElementById('property-form').reset();
     document.getElementById('prop-id').value = '';
     document.getElementById('modal-title').innerText = 'Novo Imóvel';
     document.getElementById('delete-btn').classList.add('hidden');
-    document.body.style.overflow = 'hidden'; // Trava scroll do fundo
-}
+};
 
-function closeModal(id) {
+window.closeModal = function(id) {
     document.getElementById(id).style.display = 'none';
-    document.body.style.overflow = 'auto';
-}
+};
 
-function editProperty(id) {
+window.editProperty = function(id) {
     const p = properties.find(prop => prop.id === id);
     openModal('property-modal');
     document.getElementById('modal-title').innerText = 'Editar Imóvel';
     document.getElementById('prop-id').value = p.id;
     document.getElementById('prop-name').value = p.inquilino;
     
-    // Formata telefone para o campo
     let t = p.telefone;
-    if (t.length === 11) {
-        document.getElementById('prop-phone').value = `(${t.substring(0,2)}) ${t.substring(2,7)}-${t.substring(7)}`;
-    } else {
-        document.getElementById('prop-phone').value = t;
-    }
+    document.getElementById('prop-phone').value = t.length === 11 ? `(${t.substring(0,2)}) ${t.substring(2,7)}-${t.substring(7)}` : t;
     
     document.getElementById('prop-address').value = p.endereco;
     document.getElementById('prop-value').value = p.valor;
     document.getElementById('prop-due').value = p.vencimento;
     document.getElementById('prop-notes').value = p.observacoes;
     document.getElementById('delete-btn').classList.remove('hidden');
-}
+};
 
-async function viewContract(id) {
-    const file = await getFileFromDB(id);
-    if (file) {
-        const url = URL.createObjectURL(file);
-        window.open(url, '_blank');
-    } else {
-        alert('Contrato não encontrado!');
-    }
-}
-
-function filterStatus(status, el) {
-    currentFilter = status;
-    document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
-    el.classList.add('active');
-    renderProperties();
-}
-
-function loadDemoData() {
-    const today = new Date();
-    const currentDay = today.getDate();
-    
-    properties = [
-        {
-            id: "1",
-            inquilino: "José da Silva",
-            telefone: "11999998888",
-            endereco: "Rua das Flores, 123",
-            valor: 1200.00,
-            vencimento: currentDay - 3 > 0 ? currentDay - 3 : 25,
-            observacoes: "Inquilino antigo.",
-            hasContract: false
-        }
-    ];
-    localStorage.setItem('properties', JSON.stringify(properties));
+function vibrate(ms) {
+    if (navigator.vibrate) navigator.vibrate(ms);
 }
