@@ -74,7 +74,7 @@ function createCompactCard(p) {
             </div>
             <div class="card-actions">
                 <button class="btn-action btn-wa" onclick="sendWhatsApp(event, '${p.id}')">📲 COBRAR</button>
-                ${!isPaid ? `<button class="btn-action btn-pay" onclick="event.stopPropagation(); markAsPaid('${p.id}')">✅ BAIXA</button>` : `<button class="btn-action" style="background:#f0f0f0;color:#666;" onclick="event.stopPropagation(); undoPayment('${p.id}')">↩️ DESFAZER</button>`}
+                ${!isPaid ? `<button class="btn-action btn-pay" onclick="markAsPaid('${p.id}')">✅ BAIXA</button>` : `<button class="btn-action" style="background:#f0f0f0;color:#666;" onclick="undoPayment('${p.id}')">↩️ DESFAZER</button>`}
             </div>
         </div>
     `;
@@ -92,8 +92,12 @@ function getPropStatus(p) {
 window.saveProperty = async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('button[type="submit"]');
+    const originalBtnText = btn.innerText;
     btn.disabled = true;
+    btn.innerText = "SALVANDO DADOS...";
+
     const id = document.getElementById('prop-id').value;
+    const fileInput = document.getElementById('prop-file');
     const data = {
         userId: auth.currentUser.uid,
         inquilino: document.getElementById('prop-name').value,
@@ -103,24 +107,40 @@ window.saveProperty = async (e) => {
         vencimento: parseInt(document.getElementById('prop-due').value),
         updatedAt: new Date()
     };
+
     try {
-        let docRef;
+        let finalDocId = id;
         if (id) {
-            docRef = doc(db, "imoveis", id);
-            await updateDoc(docRef, data);
+            await updateDoc(doc(db, "imoveis", id), data);
         } else {
-            docRef = await addDoc(collection(db, "imoveis"), data);
+            const docRef = await addDoc(collection(db, "imoveis"), data);
+            finalDocId = docRef.id;
         }
-        const file = document.getElementById('prop-file').files[0];
-        if (file) {
-            const sRef = ref(storage, `contratos/${docRef.id || id}`);
+
+        // Se tiver arquivo, muda o texto do botão e faz o upload
+        if (fileInput.files[0]) {
+            btn.innerText = "ENVIANDO ARQUIVO...";
+            const file = fileInput.files[0];
+            const sRef = ref(storage, `contratos/${finalDocId}`);
             await uploadBytes(sRef, file);
             const url = await getDownloadURL(sRef);
-            await updateDoc(doc(db, "imoveis", docRef.id || id), { contratoURL: url, hasContract: true });
+            await updateDoc(doc(db, "imoveis", finalDocId), { contratoURL: url, hasContract: true });
         }
+
+        // FEEDBACK E FECHAMENTO
+        if (navigator.vibrate) navigator.vibrate(30);
         closeModal('property-modal');
-    } catch (e) { alert("Erro ao salvar."); }
-    btn.disabled = false;
+        
+        // VOLTAR PARA A TELA INICIAL (TAB HOME)
+        switchTab('home', document.querySelector('.nav-item')); 
+
+    } catch (error) {
+        console.error(error);
+        alert("Erro ao salvar. Verifique se o arquivo não é muito grande.");
+    } finally {
+        btn.disabled = false;
+        btn.innerText = originalBtnText;
+    }
 };
 
 window.editProperty = (id) => {
@@ -140,23 +160,12 @@ window.editProperty = (id) => {
 window.deleteProperty = async () => {
     const id = document.getElementById('prop-id').value;
     if (!id) return;
-    
-    if (confirm('Deseja realmente EXCLUIR este imóvel? Os dados sumirão da nuvem.')) {
+    if (confirm('Deseja realmente EXCLUIR este imóvel?')) {
         try {
-            // 1. Fecha o modal primeiro para dar feedback imediato
             closeModal('property-modal');
-            
-            // 2. Deleta do banco
             await deleteDoc(doc(db, "imoveis", id));
-            
-            // 3. Tenta deletar contrato (opcional)
             try { await deleteObject(ref(storage, `contratos/${id}`)); } catch(e) {}
-            
-            if (navigator.vibrate) navigator.vibrate(100);
-            console.log("Imóvel excluído:", id);
-        } catch (error) {
-            alert("Erro ao excluir: " + error.message);
-        }
+        } catch (error) { alert("Erro ao excluir."); }
     }
 };
 
@@ -197,7 +206,11 @@ window.handleLogout = () => { if(confirm("Sair?")) signOut(auth); };
 window.sendWhatsApp = (e, id) => {
     e.stopPropagation();
     const p = properties.find(x => x.id === id);
-    const msg = `Olá *${p.inquilino}*, lembrete do aluguel (dia ${p.vencimento}). Qualquer dúvida me avise!`;
+    const d = new Date();
+    const today = d.getDate();
+    const diff = today - p.vencimento;
+    const valor = (p.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    let msg = today > p.vencimento ? `Olá *${p.inquilino}*, notei que o aluguel de *${valor}* (vencimento dia ${p.vencimento}) está com *${diff} dias de atraso*. Poderia verificar?` : `Oi *${p.inquilino}*, lembrete do aluguel (dia ${p.vencimento}). Qualquer dúvida me avise!`;
     window.open(`https://wa.me/55${p.telefone}?text=${encodeURIComponent(msg)}`, '_blank');
 };
 
@@ -205,7 +218,11 @@ window.switchTab = (tab, el) => {
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
     document.getElementById(`tab-${tab}`).classList.remove('hidden');
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    el.classList.add('active');
+    if (el) el.classList.add('active');
+    else {
+        // Se não passar o elemento (chamada via código), marca o primeiro (Home)
+        document.querySelectorAll('.nav-item')[0].classList.add('active');
+    }
     renderAll();
 };
 
@@ -216,9 +233,7 @@ window.openModal = (id) => {
     document.getElementById('delete-btn').classList.add('hidden');
 };
 
-window.closeModal = (id) => { 
-    document.getElementById(id).style.display = 'none'; 
-};
+window.closeModal = (id) => { document.getElementById(id).style.display = 'none'; };
 
 window.renderProperties = () => {
     const list = document.getElementById('full-list');
