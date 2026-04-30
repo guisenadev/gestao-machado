@@ -21,10 +21,9 @@
 body {
     background-color: var(--bg);
     color: var(--text);
-    padding-bottom: calc(90px + var(--safe-area-bottom));
+    padding-bottom: calc(100px + var(--safe-area-bottom));
 }
 
-/* Header Moderno */
 header {
     background: var(--card);
     padding: 20px;
@@ -37,34 +36,18 @@ header {
     box-shadow: 0 2px 10px rgba(0,0,0,0.05);
 }
 
-.logo {
-    font-weight: 800;
-    color: var(--primary);
-    font-size: 20px;
-    letter-spacing: -1px;
-}
+.logo { font-weight: 800; color: var(--primary); font-size: 20px; letter-spacing: -1px; }
 
-.user-tag {
-    font-size: 11px;
-    background: #f0f0f0;
-    padding: 4px 10px;
-    border-radius: 12px;
-    color: #666;
-    font-weight: 600;
-}
-
-/* Stats */
 .stats-scroll {
     display: flex;
     gap: 12px;
     padding: 15px;
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
 }
 
 .stat-mini-card {
     background: var(--card);
-    min-width: 130px;
+    min-width: 140px;
     padding: 15px;
     border-radius: 20px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.03);
@@ -73,36 +56,42 @@ header {
 .stat-mini-card span { font-size: 10px; text-transform: uppercase; color: var(--text-light); font-weight: 700; }
 .stat-mini-card h2 { font-size: 18px; margin-top: 2px; }
 
-/* Lista Estilo Caderno Premium */
-.list-container {
-    padding: 0 15px;
-}
+.list-container { padding: 0 15px; }
 
 .compact-card {
     background: var(--card);
-    border-radius: 20px;
-    padding: 15px;
-    margin-bottom: 12px;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.04);
+    border-radius: 24px;
+    padding: 20px;
+    margin-bottom: 15px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.04);
 }
 
 .card-top {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
-.card-title { font-size: 17px; font-weight: 700; color: #000; }
+.card-title { font-size: 18px; font-weight: 800; color: #000; }
 
-.status-indicator {
-    padding: 4px 10px;
+.btn-edit-small {
+    background: #f8f8f8;
+    border: 1px solid #eee;
+    padding: 6px 12px;
     border-radius: 10px;
     font-size: 11px;
     font-weight: 800;
-    text-transform: uppercase;
+    color: var(--primary);
+}
+
+.card-address { font-size: 13px; color: var(--text-light); margin-bottom: 12px; }
+
+.status-indicator {
+    padding: 5px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 800;
 }
 
 .status-paid { background: #e8f9ed; color: var(--success); }
@@ -110,82 +99,70 @@ header {
 .status-near { background: #fff9e6; color: #b08d00; }
 .status-in-day { background: #f0f0f0; color: #666; }
 
-.card-address {
-    font-size: 13px;
-    color: var(--text-light);
-    margin-bottom: 15px;
-}
-
-.card-actions {
-    display: flex;
-    gap: 10px;
-}
+.card-actions { display: flex; gap: 10px; margin-top: 5px; }
 
 .btn-action {
     flex: 1;
     border: none;
-    border-radius: 12px;
-    padding: 12px;
-    font-size: 13px;
-    font-weight: 700;
+    border-radius: 14px;
+    padding: 14px;
+    font-size: 14px;
+    font-weight: 800;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    transition: 0.2s;
+    gap: 8px;
 }
 
 .btn-wa { background: #25D366; color: white; }
 .btn-pay { background: var(--primary); color: white; }
-.btn-wa:active, .btn-pay:active { transform: scale(0.95); }
 
-/* Bottom Nav */
 .bottom-nav {
     position: fixed;
     bottom: 0;
     width: 100%;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.98);
     backdrop-filter: blur(10px);
     display: flex;
     justify-content: space-around;
-    padding: 12px 0 calc(12px + var(--safe-area-bottom));
+    padding: 15px 0 calc(15px + var(--safe-area-bottom));
     border-top: 1px solid rgba(0,0,0,0.05);
+    z-index: 2000;
 }
 
 .nav-item {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    color: #a0a0a0;
+    gap: 5px;
+    color: #b0b0b0;
     text-decoration: none;
-    font-size: 10px;
-    font-weight: 700;
+    font-size: 11px;
+    font-weight: 800;
+    background: none;
+    border: none;
 }
 
 .nav-item.active { color: var(--primary); }
-.nav-item i { font-size: 24px; }
 
-/* Floating Add */
 .fab {
     position: fixed;
-    bottom: calc(90px + var(--safe-area-bottom));
+    bottom: calc(100px + var(--safe-area-bottom));
     right: 20px;
     background: var(--primary);
     color: white;
-    width: 60px;
-    height: 60px;
+    width: 65px;
+    height: 65px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 30px;
-    box-shadow: 0 8px 20px rgba(29, 158, 117, 0.4);
+    font-size: 35px;
+    box-shadow: 0 10px 25px rgba(29, 158, 117, 0.4);
     border: none;
-    z-index: 900;
+    z-index: 1500;
 }
 
-/* Login Moderno */
 #auth-screen {
     position: fixed;
     top: 0;
@@ -203,51 +180,43 @@ header {
 .login-card {
     background: white;
     width: 100%;
-    max-width: 380px;
-    padding: 40px 30px;
-    border-radius: 30px;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+    max-width: 400px;
+    padding: 40px;
+    border-radius: 32px;
     text-align: center;
-}
-
-.input-group {
-    text-align: left;
-    margin-bottom: 15px;
-}
-
-.input-group label {
-    font-size: 13px;
-    font-weight: 700;
-    margin-bottom: 6px;
-    display: block;
-    margin-left: 5px;
 }
 
 input {
     width: 100%;
-    padding: 16px;
-    border-radius: 15px;
+    padding: 18px;
+    border-radius: 16px;
     border: 2px solid #f0f0f0;
     background: #f9f9f9;
     font-size: 16px;
-}
-
-input:focus {
-    border-color: var(--primary);
-    background: white;
-    outline: none;
+    margin-bottom: 15px;
 }
 
 .btn-main {
     width: 100%;
-    padding: 18px;
+    padding: 20px;
     border: none;
-    border-radius: 15px;
+    border-radius: 16px;
     background: var(--primary);
     color: white;
     font-size: 16px;
-    font-weight: 700;
-    margin-top: 10px;
+    font-weight: 800;
+}
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: white;
+    z-index: 3000;
+    padding: 25px;
+    overflow-y: auto;
 }
 
 .hidden { display: none !important; }
