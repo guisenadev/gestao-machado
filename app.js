@@ -21,7 +21,6 @@ let properties = [];
 let currentFilter = 'all';
 let isLoginMode = true;
 
-// Monitoramento Auth
 onAuthStateChanged(auth, (user) => {
     if (user) {
         document.getElementById('auth-screen').style.display = 'none';
@@ -42,94 +41,127 @@ function listenToProperties(uid) {
     });
 }
 
-// Renderização Principal
 function renderAll() {
     renderStats();
     
-    // Lista da Home (Ordenada por Pendentes/Atrasados)
+    // Lista Home (Pendentes primeiro)
     const homeList = document.getElementById('home-list');
     homeList.innerHTML = '';
+    
     const sorted = [...properties].sort((a, b) => {
         const sA = getPropStatus(a);
         const sB = getPropStatus(b);
-        if (sA === 'late') return -1;
-        if (sA === 'near' && sB !== 'late') return -1;
-        return 1;
+        if (sA === 'late' && sB !== 'late') return -1;
+        if (sA === 'near' && sB === 'in-day') return -1;
+        if (sA === 'paid' && sB !== 'paid') return 1;
+        return 0;
     });
-    sorted.slice(0, 10).forEach(p => homeList.innerHTML += createCompactCard(p));
 
+    sorted.forEach(p => homeList.innerHTML += createCompactCard(p));
     renderProperties();
     renderContracts();
 }
 
 function createCompactCard(p) {
     const status = getPropStatus(p);
-    const label = status === 'paid' ? 'Pago' : status === 'late' ? 'Atrasado' : status === 'near' ? 'Vencendo' : 'Em dia';
+    const isPaid = status === 'paid';
+    const label = isPaid ? 'Pago ✅' : status === 'late' ? 'Atrasado 🔴' : status === 'near' ? 'Vencendo 🟡' : 'Em dia 🟢';
     const valor = (p.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     
     return `
-        <div class="compact-card" onclick="editProperty('${p.id}')">
+        <div class="compact-card" style="opacity: ${isPaid ? '0.6' : '1'}" onclick="editProperty('${p.id}')">
             <div class="card-top">
                 <span class="card-title">${p.inquilino}</span>
                 <span class="status-indicator status-${status}">${label}</span>
             </div>
             <div class="card-address">📍 ${p.endereco} • Dia ${p.vencimento}</div>
-            <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px;">${valor}</div>
+            <div style="font-size: 16px; font-weight: 800; margin-bottom: 12px; color: var(--primary);">${valor}</div>
+            
             <div class="card-actions">
                 <button class="btn-action btn-wa" onclick="sendWhatsApp(event, '${p.id}')">
                     <span>📲</span> COBRAR
                 </button>
-                ${status !== 'paid' ? `
+                ${!isPaid ? `
                 <button class="btn-action btn-pay" onclick="event.stopPropagation(); markAsPaid('${p.id}')">
                     <span>✅</span> BAIXA
-                </button>` : ''}
+                </button>` : `
+                <button class="btn-action" style="background: #f0f0f0; color: #666;" onclick="event.stopPropagation(); undoPayment('${p.id}')">
+                    <span>↩️</span> DESFAZER
+                </button>`}
             </div>
         </div>
     `;
 }
 
-// Lógica de Status
 function getPropStatus(p) {
-    const currentMonth = (new Date().getMonth() + 1) + "/" + new Date().getFullYear();
+    const d = new Date();
+    const currentMonth = (d.getMonth() + 1) + "/" + d.getFullYear();
     if (p.lastPaymentMonth === currentMonth) return 'paid';
-    const today = new Date().getDate();
+    
+    const today = d.getDate();
     if (today > p.vencimento) return 'late';
     if (p.vencimento - today <= 5) return 'near';
     return 'in-day';
 }
 
+window.markAsPaid = async (id) => {
+    if (navigator.vibrate) navigator.vibrate(50);
+    const d = new Date();
+    const month = (d.getMonth() + 1) + "/" + d.getFullYear();
+    if (confirm(`Confirmar que o aluguel de ${month} foi pago?`)) {
+        try {
+            await updateDoc(doc(db, "imoveis", id), { 
+                lastPaymentMonth: month,
+                lastPaymentDate: new Date()
+            });
+        } catch (e) { alert("Erro ao atualizar."); }
+    }
+};
+
+window.undoPayment = async (id) => {
+    if (confirm("Deseja cancelar a baixa deste pagamento?")) {
+        try {
+            await updateDoc(doc(db, "imoveis", id), { 
+                lastPaymentMonth: "",
+                lastPaymentDate: null
+            });
+        } catch (e) { alert("Erro ao atualizar."); }
+    }
+};
+
+// ... Funções de Login, Stats e UI (mantidas e otimizadas) ...
+
 function renderStats() {
     const stats = properties.reduce((acc, p) => {
         const s = getPropStatus(p);
         acc.total++;
-        acc.revenue += (p.valor || 0);
         if (s === 'paid') acc.paid++; else acc.pending++;
+        if (s !== 'paid') acc.revenuePending += (p.valor || 0);
         if (s === 'late') acc.late++;
         return acc;
-    }, { total: 0, revenue: 0, paid: 0, pending: 0, late: 0 });
+    }, { total: 0, paid: 0, pending: 0, late: 0, revenuePending: 0 });
 
-    document.getElementById('stat-revenue').innerText = stats.revenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    document.getElementById('stat-revenue').innerText = stats.revenuePending.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     document.getElementById('stat-paid').innerText = stats.paid;
     document.getElementById('stat-pending').innerText = stats.pending;
 
     const banner = document.getElementById('alert-banner');
     if (stats.late > 0) {
         banner.style.display = 'flex';
-        document.getElementById('alert-text').innerText = `${stats.late} aluguéis atrasados!`;
+        document.getElementById('alert-text').innerText = `${stats.late} casas com aluguel atrasado!`;
     } else banner.style.display = 'none';
 }
 
-// Funções Globais (Window)
 window.handleAuth = async () => {
     const email = document.getElementById('auth-email').value;
     const pass = document.getElementById('auth-password').value;
     const btn = document.getElementById('btn-login');
-    if(!email || !pass) return alert("Preencha tudo.");
+    if(!email || !pass) return alert("Preencha e-mail e senha.");
     btn.disabled = true;
     try {
         if (isLoginMode) await signInWithEmailAndPassword(auth, email, pass);
         else await createUserWithEmailAndPassword(auth, email, pass);
-    } catch (e) { alert("Erro: " + e.message); }
+    } catch (e) { alert("Acesso negado. Verifique os dados."); }
     btn.disabled = false;
 };
 
@@ -140,7 +172,7 @@ window.toggleAuthMode = () => {
     document.getElementById('btn-login').innerText = isLoginMode ? "ENTRAR" : "CADASTRAR";
 };
 
-window.handleLogout = () => { if(confirm("Sair?")) signOut(auth); };
+window.handleLogout = () => { if(confirm("Sair do sistema?")) signOut(auth); };
 
 window.saveProperty = async (e) => {
     e.preventDefault();
@@ -175,17 +207,18 @@ window.saveProperty = async (e) => {
     } catch (e) { alert("Erro ao salvar."); }
 };
 
-window.markAsPaid = async (id) => {
-    const month = (new Date().getMonth() + 1) + "/" + new Date().getFullYear();
-    if (confirm(`Confirmar pagamento de ${month}?`)) {
-        await updateDoc(doc(db, "imoveis", id), { lastPaymentMonth: month });
-    }
-};
-
 window.sendWhatsApp = (e, id) => {
     e.stopPropagation();
     const p = properties.find(x => x.id === id);
-    const msg = `Olá *${p.inquilino}*, lembrete do aluguel (dia ${p.vencimento}). Consegue verificar?`;
+    const d = new Date();
+    const today = d.getDate();
+    const diff = today - p.vencimento;
+    const valor = (p.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    
+    let msg = "";
+    if (today > p.vencimento) msg = `Olá *${p.inquilino}*, notei que o aluguel de *${valor}* (vencimento dia ${p.vencimento}) está com *${diff} dias de atraso*. Poderia verificar? Obrigado!`;
+    else msg = `Oi *${p.inquilino}*, lembrete do aluguel (dia ${p.vencimento}). Qualquer dúvida me avise!`;
+    
     window.open(`https://wa.me/55${p.telefone}?text=${encodeURIComponent(msg)}`, '_blank');
 };
 
@@ -200,6 +233,7 @@ window.openModal = (id) => {
     document.getElementById(id).style.display = 'flex';
     document.getElementById('property-form').reset();
     document.getElementById('prop-id').value = '';
+    document.getElementById('delete-btn').classList.add('hidden');
 };
 
 window.closeModal = (id) => { document.getElementById(id).style.display = 'none'; };
@@ -214,6 +248,14 @@ window.editProperty = (id) => {
     document.getElementById('prop-value').value = p.valor;
     document.getElementById('prop-due').value = p.vencimento;
     document.getElementById('delete-btn').classList.remove('hidden');
+};
+
+window.deleteProperty = async () => {
+    const id = document.getElementById('prop-id').value;
+    if (confirm('Excluir imóvel permanentemente?')) {
+        await deleteDoc(doc(db, "imoveis", id));
+        closeModal('property-modal');
+    }
 };
 
 window.renderProperties = () => {
